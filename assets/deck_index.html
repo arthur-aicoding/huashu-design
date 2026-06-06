@@ -41,7 +41,7 @@
   body[data-ov="grid"][data-mode="overview"]    { background: #efece4; }
 
   /* ════════ 模式 1 · 自适应网格墙（一屏装得下→居中轻斜；装不下→舒适大小竖向滚动）════════ */
-  #ov-grid { display: flex; justify-content: center; perspective: 3200px; perspective-origin: 50% 42%;
+  #ov-grid { display: flex; justify-content: center; perspective: 2200px; perspective-origin: 50% 42%;
     background: radial-gradient(120% 90% at 50% 0%, #f4f1e9, #e7e3d8 75%); }
   body[data-grid="fit"]    #ov-grid { overflow: hidden;   align-items: center; }
   body[data-grid="scroll"] #ov-grid { overflow-y: auto; overflow-x: hidden; align-items: flex-start; padding: 74px 0 110px; }
@@ -216,26 +216,29 @@
     for (let i = 0; i < n; i++) wall.appendChild(makeCard(i, null, false));  // 网格 = iframe 真页面
     layoutWall();
   }
+  const GRID_PAD = 74;  // #ov-grid scroll 顶部 padding，算动态 transform-origin 用
   function layoutWall() {
     const n = deck.length; if (!n) return;
-    const vw = innerWidth, vh = innerHeight, gap = 26;          // 大间距：倾斜后行也绝不重叠 → 每张可点
-    const target = 290;
-    let cols = Math.max(3, Math.min(9, Math.floor((vw * 0.94 + gap) / (target + gap))));
+    const vw = innerWidth, vh = innerHeight, gap = 26;
+    const availW = vw * 0.86;                                   // 留 rotateZ 横向余量（强对角也不裁切）
+    const target = 280;
+    let cols = Math.max(3, Math.min(9, Math.floor((availW + gap) / (target + gap))));
     cols = Math.min(cols, n);
     const rows = Math.ceil(n / cols);
-    const cardW = Math.min(target + 40, (vw * 0.94 - (cols - 1) * gap) / cols);
+    const cardW = Math.min(target + 40, (availW - (cols - 1) * gap) / cols);
     const cardH = cardW * 9 / 16;
     const baseW = cols * cardW + (cols - 1) * gap;
     const wallH = rows * cardH + (rows - 1) * gap;
     wall.style.gridTemplateColumns = 'repeat(' + cols + ', 1fr)';
     wall.style.gap = gap + 'px';
     wall.style.width = baseW + 'px';
+    // 单平面(无 preserve-3d)→任意角度都不重叠、可点；fit 与 scroll 都给强对角倾斜
     if (wallH <= vh * 0.80) {
-      // 一屏装得下：对角倾斜（rotateZ 主导 + 克制 rotateX，大 perspective→几乎不前后压缩→不重叠），居中铺满
       document.body.setAttribute('data-grid', 'fit');
-      const rx = Math.max(9, Math.min(15, 15 - (rows - 2) * 1.4));
-      const rz = Math.max(5, Math.min(9, 9 - (rows - 2) * 0.8));
+      const rx = Math.max(11, Math.min(15, 15 - (rows - 2) * 1.1));
+      const rz = Math.max(8, Math.min(11, 11 - (rows - 2) * 0.7));
       wall.style.setProperty('--rx', rx); wall.style.setProperty('--rz', rz);
+      wall.style.transformOrigin = 'center center';
       const tilt = 'rotateX(' + rx + 'deg) rotateZ(-' + rz + 'deg)';
       wall.style.transform = tilt;
       const r = wall.getBoundingClientRect();
@@ -243,12 +246,18 @@
       s = Math.max(0.6, Math.min(s, 1.6));
       wall.style.transform = 'scale(' + s + ') ' + tilt;
     } else {
-      // 页太多：舒适大小 + 竖向滚动；仅轻 rotateX 后仰(rotateZ 会让高墙横向裁切)，平铺不重叠 → 稳定可点
+      // 多页：舒适大小竖向滚动 + 强对角倾斜；transform-origin 跟随滚动→消除高墙 rotateZ 把远端行甩出屏幕
       document.body.setAttribute('data-grid', 'scroll');
-      wall.style.setProperty('--rx', 12); wall.style.setProperty('--rz', 0);
-      wall.style.transform = 'rotateX(12deg)';
+      wall.style.setProperty('--rx', 14); wall.style.setProperty('--rz', 7);
+      wall.style.transform = 'rotateX(14deg) rotateZ(-7deg)';
+      updateScrollOrigin();
     }
     wall.querySelectorAll('.card .thumb').forEach(t => { const c = t.parentElement; if (c.clientWidth) t.style.transform = 'scale(' + (c.clientWidth / W) + ')'; });
+  }
+  function updateScrollOrigin() {
+    if (document.body.getAttribute('data-grid') !== 'scroll') return;
+    const ovg = document.getElementById('ov-grid');
+    wall.style.transformOrigin = '50% ' + (ovg.scrollTop + window.innerHeight / 2 - GRID_PAD) + 'px';
   }
 
   /* ════════ 无限画廊（洗牌不重复） ════════ */
@@ -321,6 +330,7 @@
   document.getElementById('overviewBtn').addEventListener('click', () => setMode('overview'));
   let rT;
   window.addEventListener('resize', () => { fit(); clearTimeout(rT); rT = setTimeout(buildOverview, 140); });
+  document.getElementById('ov-grid').addEventListener('scroll', updateScrollOrigin, { passive: true });
   window.addEventListener('hashchange', () => { const m = location.hash.match(/^#(\d+)$/); if (m) { current = parseInt(m[1], 10) - 1; setMode('present'); } });
 
   const hashMatch = location.hash.match(/^#(\d+)$/);
